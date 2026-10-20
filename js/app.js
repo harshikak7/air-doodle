@@ -6,12 +6,26 @@ const cv = $('#cv'), ctx = cv.getContext('2d'), vid = $('#vid'), hint = $('#hint
 const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const COLORS = ['#B79CF0', '#F5A9C4', '#8FD6C0', '#F7CE7A', '#9DB8F5'];
 const BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
-const PINCH_ON = 0.32, PINCH_OFF = 0.5;   // thumb-index distance / palm size (hysteresis keeps it steady)
+const PINCH_ON = 0.32, PINCH_OFF = 0.5, PINCH_FIRM = 0.4;  // thumb-index distance / palm size. ON/OFF = hysteresis, FIRM = stop adding points once fingers start opening
+
+// One Euro filter: smooth when the hand is slow (kills jitter), responsive when it moves fast (no lag)
+class OneEuro {
+  constructor(mc = 1.2, beta = 0.012, dc = 1) { this.mc = mc; this.beta = beta; this.dc = dc; this.x = null; this.dx = 0; }
+  a(c, dt) { return 1 / (1 + (1 / (2 * Math.PI * c)) / dt); }
+  f(v, dt) {
+    if (this.x === null) { this.x = v; return v; }
+    this.dx += this.a(this.dc, dt) * ((v - this.x) / dt - this.dx);
+    this.x += this.a(this.mc + this.beta * Math.abs(this.dx), dt) * (v - this.x);
+    return this.x;
+  }
+  reset() { this.x = null; this.dx = 0; }
+}
+const fx = new OneEuro(), fy = new OneEuro();
 
 let W = 0, H = 0, ci = 0;
 const S = {
   mode: null, stream: null, hands: null, ready: false, busy: false,
-  hand: null, seen: 0, pinchRaw: false, pinching: false, drawing: false,
+  hand: null, seen: 0, lastInf: 0, lastT: -1, onN: 0, offN: 0, pinchRaw: false, pinching: false, drawing: false,
   stroke: [], stickers: [], grab: null, drag: null, touchDraw: false, lastTap: null, flashUntil: 0
 };
 
@@ -35,13 +49,16 @@ function lm2s(x, y) { const g = geo(); return { x: W - (g.ox + x * g.vw * g.sc),
 
 function onResults(res) {
   const L = res.multiHandLandmarks && res.multiHandLandmarks[0], now = performance.now();
-  if (!L) { S.hand = null; return; }
+  if (!L) { S.hand = null; S.onN = S.offN = 0; if (now - S.seen > 300) { fx.reset(); fy.reset(); } return; }
   const g = geo(), P = i => ({ x: L[i].x * g.vw, y: L[i].y * g.vh }), d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-  const ratio = d(P(4), P(8)) / (d(P(0), P(9)) || 1);
-  S.pinchRaw = S.pinchRaw ? ratio < PINCH_OFF : ratio < PINCH_ON;
-  const mid = lm2s((L[4].x + L[8].x) / 2, (L[4].y + L[8].y) / 2), prev = S.hand && S.hand.pt;
-  const pt = prev ? { x: prev.x + (mid.x - prev.x) * 0.6, y: prev.y + (mid.y - prev.y) * 0.6 } : mid;
-  S.hand = { pts: L.map(l => lm2s(l.x, l.y)), pt, pinch: S.pinchRaw };
+  const size = (d(P(0), P(9)) + d(P(5), P(17))) / 2 || 1, ratio = d(P(4), P(8)) / size;
+  // need 2 frames in a row to switch state, so one noisy frame can't start or break a stroke
+  if (!S.pinchRaw) { S.onN = ratio < PINCH_ON ? S.onN + 1 : 0; if (S.onN >= 2) { S.pinchRaw = true; S.offN = 0; } }
+  else { S.offN = ratio > PINCH_OFF ? S.offN + 1 : 0; if (S.offN >= 2) { S.pinchRaw = false; S.onN = 0; } }
+  const dt = Math.min(0.1, Math.max(0.008, (now - (S.lastInf || now - 33)) / 1000)); S.lastInf = now;
+  const mid = lm2s((L[4].x + L[8].x) / 2, (L[4].y + L[8].y) / 2);
+  const pt = { x: fx.f(mid.x, dt), y: fy.f(mid.y, dt) };
+  S.hand = { pts: L.map(l => lm2s(l.x, l.y)), pt, pinch: S.pinchRaw, firm: ratio < PINCH_FIRM, ratio };
   S.seen = now;
 }
 
@@ -60,7 +77,7 @@ async function startCam() {
     if (!S.hands) {
       const mobile = matchMedia('(pointer:coarse)').matches;
       S.hands = new Hands({ locateFile: f => 'vendor/mediapipe/hands/' + f });
-      S.hands.setOptions({ maxNumHands: 1, modelComplexity: mobile ? 0 : 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.5, selfieMode: false });
+      S.hands.setOptions({ maxNumHands: 1, modelComplexity: mobile ? 0 : 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5, selfieMode: false });
       S.hands.onResults(onResults);
       await S.hands.initialize();
     }
@@ -148,7 +165,7 @@ cv.addEventListener('wheel', e => { const h = hit(pt(e)); if (h) { e.preventDefa
 function endPinch() {
   S.pinching = false;
   if (S.grab) { S.grab = null; flash('placed!', 1200); }
-  if (S.drawing) { S.drawing = false; pop(); }
+  if (S.drawing) { S.drawing = false; if (S.stroke.length > 12) S.stroke.splice(-3); pop(); }
 }
 function logic(now) {
   if (S.mode !== 'cam' || !S.ready) return;
@@ -160,14 +177,15 @@ function logic(now) {
       if (st) { S.grab = { st, dx: st.x - p.x, dy: st.y - p.y }; front(st); }
       else { S.drawing = true; S.stroke = [{ x: p.x, y: p.y }]; }
     } else if (S.grab) { S.grab.st.x = p.x + S.grab.dx; S.grab.st.y = p.y + S.grab.dy; }
-    else if (S.drawing) { const l = S.stroke[S.stroke.length - 1]; if (Math.hypot(p.x - l.x, p.y - l.y) > 2.5) S.stroke.push({ x: p.x, y: p.y }); }
+    else if (S.drawing && h.firm) { const l = S.stroke[S.stroke.length - 1]; if (Math.hypot(p.x - l.x, p.y - l.y) > 2.5) S.stroke.push({ x: p.x, y: p.y }); }
   } else if (S.pinching && (h || now - S.seen > 400)) endPinch();
   if (now > S.flashUntil) {
-    say(S.grab ? 'carrying it! open your fingers to let go' : S.drawing ? 'drawing! open your fingers to pop it' : h ? 'pinch thumb and index to draw. pinch a sticker to move it' : 'show me your hand');
+    say(S.grab ? 'carrying it! open your fingers to let go' : S.drawing ? 'drawing! open your fingers to pop it' : h ? 'pinch thumb and index to draw. pinch a sticker to move it' : 'show me your hand, palm to the camera');
   }
 }
 function pump() {
   if (S.mode === 'cam' && S.ready && !S.busy && vid.readyState >= 2) {
+    if (vid.currentTime === S.lastT) return; S.lastT = vid.currentTime;
     S.busy = true; S.hands.send({ image: vid }).catch(() => {}).finally(() => { S.busy = false; });
   }
 }
@@ -189,7 +207,7 @@ function render(now) {
     ctx.fillStyle = '#CDB9F5';
     h.pts.forEach((q, i) => { ctx.beginPath(); ctx.arc(q.x, q.y, i === 4 || i === 8 ? 5 : 3, 0, 6.283); ctx.fill(); });
     const on = h.pinch, col = COLORS[ci % COLORS.length];
-    ctx.beginPath(); ctx.arc(h.pt.x, h.pt.y, on ? 12 : 18, 0, 6.283); ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.stroke();
+    ctx.beginPath(); ctx.arc(h.pt.x, h.pt.y, 9 + Math.max(0, Math.min(1, (h.ratio - 0.2) / 0.5)) * 14, 0, 6.283); ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.stroke();
     ctx.lineWidth = 3; ctx.strokeStyle = '#8467D4'; ctx.stroke();
     if (on) { ctx.beginPath(); ctx.arc(h.pt.x, h.pt.y, 6, 0, 6.283); ctx.fillStyle = S.grab ? '#8467D4' : col; ctx.fill(); }
   }

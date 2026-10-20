@@ -1,50 +1,48 @@
-# air doodle
+# ✌️ Air Doodle
 
-Pinch your thumb and index finger at your webcam to draw in thin air. Let go and the drawing pops into a sticker. Pinch a sticker to carry it around, then share a picture of your doodles.
+A zero-dependency, privacy-first web app to draw mid-air using webcam fingertip tracking.
 
-- **Real hand tracking:** MediaPipe Hands finds 21 landmarks on your hand every frame. Drawing starts when your thumb tip and index tip pinch together.
-- **Private:** everything runs in the browser tab. No server, no uploads, no analytics. The model, fonts and scripts are all in this repo, so the page makes zero third-party requests.
-- **Permission first:** the camera is only requested after you press "turn on camera". Say no and touch mode still works.
-- **Share card:** contains only the stickers on a pastel card, never the camera image.
+Pinch thumb and index finger to draw. Release to convert your doodle into a moveable sticker. Pinch any sticker again to move it around.
 
-## Run it locally
+## ✨ Highlights
 
-Any static server works (the camera needs `localhost` or HTTPS):
+* **21-Landmark Hand Tracking:** Powered by a self-hosted MediaPipe Hands model.
+* **100% Offline / Self-Contained:** All ML models, scripts, and fonts (`Nunito` & `DM Sans`) are bundled locally—no external network calls or CDNs.
+* **Privacy First:** Frames process locally on your device. Shared cards render stickers only, never your camera feed.
+* **Fallbacks:** Full mouse and touch support if camera access is declined.
 
-    cd air-doodle
-    python3 -m http.server 8000
-    # open http://localhost:8000
+## 🚀 Quick Start
 
-## Put it on GitHub and make it live (GitHub Pages)
+Serve over HTTP (required for webcam permissions):
 
-1. Create an empty repo on github.com (for example `air-doodle`), with no README.
-2. In this folder run:
+### VS Code Live Server
+1. Open project folder in VS Code.
+2. Install the **Live Server** extension.
+3. Right-click `index.html` → **Open with Live Server**.
 
-       git init
-       git add .
-       git commit -m "air doodle"
-       git branch -M main
-       git remote add origin https://github.com/YOUR-USERNAME/air-doodle.git
-       git push -u origin main
+### Python Server
+Run in the root directory:
+```bash
+python3 -m http.server 8000
+```
+Open `http://localhost:8000`.
 
-3. On GitHub go to **Settings → Pages → Build and deployment → Source: Deploy from a branch → Branch: main, folder / (root) → Save.**
-4. After about a minute your site is live at `https://YOUR-USERNAME.github.io/air-doodle/`. HTTPS is automatic, which the camera requires.
+## 🌐 Deploy to GitHub Pages
 
-Prefer Netlify or Vercel? Import the repo (or drag the folder onto Netlify Drop). No build command; the publish directory is the repo root.
+```bash
+git init
+git add .
+git commit -m "Initial commit"
+git branch -M main
+git remote add origin https://github.com/YOUR-USERNAME/air-doodle.git
+git push -u origin main
+```
+Go to **Settings → Pages** → Choose **Deploy from a branch** → Branch: `main`, Folder: `/ (root)` → **Save**.
 
-## Files
+## ⚙️ Calibration
 
-    index.html            page
-    css/style.css         look (offwhite + lavender, Nunito + DM Sans)
-    js/app.js             hand tracking, gestures, stickers, share card
-    fonts/                self-hosted fonts
-    vendor/mediapipe/     MediaPipe Hands (Apache-2.0): model + wasm, self-hosted
-
-## Tweaks
-
-- Pinch sensitivity: `PINCH_ON` / `PINCH_OFF` at the top of `js/app.js`.
-- Colors: `COLORS` in `js/app.js` and the variables at the top of `css/style.css`.
-
-## Credits
-
-Hand tracking by Google MediaPipe (`@mediapipe/hands`, Apache-2.0). Fonts: Nunito and DM Sans (SIL OFL) via Fontsource.
+Adjust pinch sensitivity in `js/app.js`:
+```javascript
+const PINCH_ON = 0.04;  // Distance threshold to start pinch
+const PINCH_OFF = 0.07; // Distance threshold to release pinch
+```
