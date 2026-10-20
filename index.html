@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>air doodle</title>
+<meta name="description" content="Pinch your fingers at your camera, draw in thin air, and turn it into a sticker you can move and share. Everything stays on your device.">
+<meta name="theme-color" content="#FBF8F3">
+<meta property="og:title" content="air doodle">
+<meta property="og:description" content="Draw in thin air with your fingers, then pick the drawing up and move it around.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%23CDB9F5'/%3E%3Cpath d='M12 38c6-16 14-16 20-2s14 12 20-6' fill='none' stroke='%23FBF8F3' stroke-width='7' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<main id="app">
+  <section id="stage">
+    <video id="vid" playsinline muted></video>
+    <div id="wash"></div>
+    <canvas id="cv"></canvas>
+  </section>
+
+  <header class="top">
+    <div class="logo">air doodle<svg viewBox="0 0 46 8" fill="none" stroke="#8467D4" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M2 5C7 0 11 0 15 4S23 8 28 4 38 0 44 4"/></svg></div>
+    <button id="stopBtn" class="chip" hidden>stop camera</button>
+  </header>
+
+  <div id="hint" class="pill" role="status" aria-live="polite" hidden></div>
+
+  <nav class="dock" id="dock" hidden>
+    <button id="undoBtn" class="btn">undo</button>
+    <button id="shareBtn" class="btn main">share</button>
+    <button id="clearBtn" class="btn ghost">clear</button>
+  </nav>
+
+  <section id="intro" class="card" aria-labelledby="t">
+    <svg viewBox="0 0 70 12" width="70" height="12" fill="none" stroke="#8467D4" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M3 7C10 0 16 0 22 6S34 12 41 6 55 0 67 6"/></svg>
+    <h1 id="t">draw in the air, then pick it up.</h1>
+    <p>Pinch your thumb and index finger in front of the camera to draw. Let go and your doodle pops into a sticker. Pinch a sticker to carry it around.</p>
+    <ul>
+      <li><i><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#8467D4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6.5l2.5 2.5L10 3"/></svg></i>Hand tracking runs on this device only</li>
+      <li><i><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#8467D4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6.5l2.5 2.5L10 3"/></svg></i>Nothing is recorded, uploaded or saved</li>
+      <li><i><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#8467D4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6.5l2.5 2.5L10 3"/></svg></i>Shared pictures hold only your doodles, never your face</li>
+    </ul>
+    <p id="err" hidden></p>
+    <div class="row">
+      <button id="camBtn" class="btn main">turn on camera</button>
+      <button id="touchBtn" class="btn">no camera, use touch</button>
+    </div>
+    <p class="fine">Your browser asks for permission first. You can say no and still play.</p>
+  </section>
+
+  <div id="modal" hidden>
+    <div class="sheet">
+      <img id="prev" alt="Your doodle card">
+      <div class="row">
+        <button id="mShare" class="btn main" hidden>send it</button>
+        <button id="mSave" class="btn">save picture</button>
+        <button id="mClose" class="btn ghost">close</button>
+      </div>
+      <p class="fine">Only your doodles are in this picture, never your camera.</p>
+    </div>
+  </div>
+</main>
+
+<script src="vendor/mediapipe/hands/hands.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
