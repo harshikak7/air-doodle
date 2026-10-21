@@ -49,5 +49,3 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     print(f"air doodle on http://localhost:{port}")
     ThreadingHTTPServer(("", port), Dev).serve_forever()
-
-
