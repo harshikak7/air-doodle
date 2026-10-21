@@ -35,7 +35,7 @@ class Dev(SimpleHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_POST(self):
-        if self.path.split("?")[0] != "/api/classify":
+        if self.path.split("?")[0] != "/api/main":
             return self._json(404, {"error": "not found"})
         n = int(self.headers.get("Content-Length") or 0)
         self._json(*handle_classify(self.rfile.read(min(n, MAX_BODY + 1))))
@@ -49,3 +49,5 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     print(f"air doodle on http://localhost:{port}")
     ThreadingHTTPServer(("", port), Dev).serve_forever()
+
+
