@@ -48,3 +48,17 @@ button:focus-visible{outline:3px solid var(--lavd);outline-offset:2px}
 .sheet img{width:100%;max-height:52vh;object-fit:contain;border-radius:18px;background:var(--bg);display:block}
 .sheet .row{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:14px}
 .sheet .fine{margin-top:10px!important;color:var(--mute)}
+
+.tools{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.chip[aria-pressed="true"]{background:var(--lav);border-color:var(--lav);color:#2B2150}
+.switch{display:flex;gap:12px;align-items:flex-start;padding:13px 14px;background:var(--lav2);border-radius:18px;margin:0 0 18px;cursor:pointer;position:relative}
+.switch input{position:absolute;opacity:0;width:1px;height:1px}
+.switch .track{flex:none;width:42px;height:25px;border-radius:999px;background:var(--surface);border:1.5px solid var(--lav);position:relative;transition:background .2s;margin-top:1px}
+.switch .track::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:var(--lavd);transition:transform .2s}
+.switch input:checked+.track{background:var(--lav)}
+.switch input:checked+.track::after{transform:translateX(17px);background:#2B2150}
+.switch input:focus-visible+.track{outline:3px solid var(--lavd);outline-offset:2px}
+.swtext b{display:block;font:800 15px/1.2 var(--head)}
+.swtext em{font:500 12px var(--body);color:var(--mute);font-style:normal;margin-left:6px}
+.swtext small{display:block;margin-top:4px;font-size:13px;line-height:1.4;color:var(--mute)}
+@media (prefers-reduced-motion:reduce){.switch .track,.switch .track::after,.btn,.chip{transition:none}}

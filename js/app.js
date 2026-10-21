@@ -26,7 +26,7 @@ let W = 0, H = 0, ci = 0;
 const S = {
   mode: null, stream: null, hands: null, ready: false, busy: false,
   hand: null, seen: 0, lastInf: 0, lastT: -1, onN: 0, offN: 0, pinchRaw: false, pinching: false, drawing: false,
-  stroke: [], stickers: [], grab: null, drag: null, touchDraw: false, lastTap: null, flashUntil: 0
+  stroke: [], stickers: [], grab: null, drag: null, touchDraw: false, lastTap: null, flashUntil: 0, magic: false, log: [], nid: 0, hinted: false
 };
 
 function resize() {
@@ -89,7 +89,7 @@ async function startCam() {
 function stopCam() { if (S.stream) { S.stream.getTracks().forEach(t => t.stop()); S.stream = null; } vid.srcObject = null; }
 function leave() {
   stopCam(); S.mode = null; S.hand = null; S.pinching = S.drawing = false; S.grab = null; S.stroke = [];
-  stage.classList.remove('cam'); $('#intro').hidden = false; $('#dock').hidden = true; $('#stopBtn').hidden = true; say('');
+  stage.classList.remove('cam'); $('#intro').hidden = false; $('#dock').hidden = true; $('#stopBtn').hidden = true; $('#magicBtn').hidden = true; say('');
 }
 addEventListener('pagehide', stopCam);
 
@@ -97,7 +97,7 @@ function enter() {
   const cam = S.mode === 'cam';
   $('#intro').hidden = true; $('#dock').hidden = false; $('#stopBtn').hidden = false;
   stage.classList.toggle('cam', cam); $('#stopBtn').textContent = cam ? 'stop camera' : 'back';
-  resize(); refreshUI();
+  resize(); refreshUI(); $('#magicBtn').hidden = false; syncMagic();
   if (!cam) say('drag anywhere to draw. let go and it pops into a sticker');
 }
 
@@ -114,11 +114,15 @@ function pop() {
   const p = smooth(raw); let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
   for (const v of p) { x0 = Math.min(x0, v.x); y0 = Math.min(y0, v.y); x1 = Math.max(x1, v.x); y1 = Math.max(y1, v.y); }
   const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
-  S.stickers.push({ p: p.map(v => ({ x: v.x - cx, y: v.y - cy })), w: x1 - x0, h: y1 - y0, x: cx, y: cy, s: 1, r: 0, lw: 10, col: COLORS[ci++ % COLORS.length], t0: performance.now(), ph: Math.random() * 6.28 });
+  const rel = raw.map(v => [Math.round(v.x - x0), Math.round(v.y - y0)]), step = Math.ceil(rel.length / 160);
+  const st = { id: S.nid++, p: p.map(v => ({ x: v.x - cx, y: v.y - cy })), w: x1 - x0, h: y1 - y0, x: cx, y: cy, s: 1, r: 0, lw: 10, col: COLORS[ci++ % COLORS.length], t0: performance.now(), ph: Math.random() * 6.28,
+    raw: rel.filter((_, i) => i % step === 0 || i === rel.length - 1), label: null };
+  st.p0 = st.p; st.w0 = st.w; st.h0 = st.h; S.stickers.push(st);
   flash(S.mode === 'cam' ? 'popped! pinch it to carry it around' : 'popped! drag it around. double-tap to resize');
+  if (S.magic) classifyStroke(st);
   refreshUI();
 }
-function refreshUI() { const e = !S.stickers.length; $('#undoBtn').disabled = e; $('#shareBtn').disabled = e; $('#clearBtn').disabled = e; }
+function refreshUI() { const e = !S.stickers.length; $('#undoBtn').disabled = e; $('#shareBtn').disabled = e; $('#clearBtn').disabled = e; $('#exportBtn').hidden = !S.log.length; }
 function path(g, p) {
   g.beginPath(); g.moveTo(p[0].x, p[0].y);
   for (let i = 1; i < p.length - 1; i++) g.quadraticCurveTo(p[i].x, p[i].y, (p[i].x + p[i+1].x) / 2, (p[i].y + p[i+1].y) / 2);
@@ -142,10 +146,91 @@ function hit(p) {
 }
 const front = s => { const i = S.stickers.indexOf(s); if (i >= 0) { S.stickers.splice(i, 1); S.stickers.push(s); } };
 
+
+/* ---------- magic shapes: a Python model (api/classify.py) names the doodle, then it is tidied up ---------- */
+const LABELS = ['circle', 'triangle', 'square', 'star', 'heart', 'line', 'squiggle'];
+let T = {};
+function readTheme() { const c = getComputedStyle(document.documentElement); T = { surface: c.getPropertyValue('--surface').trim() || '#fff', ink: c.getPropertyValue('--ink').trim() || '#3A3052' }; }
+readTheme(); matchMedia('(prefers-color-scheme: dark)').addEventListener('change', readTheme);
+
+function closedPoly(v) {  // each edge gets a few points and every corner is doubled, so corners stay crisp but softly rounded
+  const n = v.length, o = [];
+  for (let i = 0; i < n; i++) {
+    const a = v[i], b = v[(i + 1) % n];
+    for (let k = 1; k <= 6; k++) { const t = k / 6, q = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }; o.push(q); if (k === 6) o.push(q); }
+  }
+    return [...o.slice(2), ...o.slice(0, 3)];
+}
+function tpl(label, st) {
+  let tw = Math.max(st.w0, 24), th = Math.max(st.h0, 24);
+  if (label !== 'line') { const a = tw / th; if (a > 1.33) tw = th * 1.33; else if (a < 0.75) th = tw / 0.75; }
+  const P = (x, y) => ({ x: x * tw, y: y * th });
+  if (label === 'circle') { const o = []; for (let i = 0; i <= 48; i++) { const t = i / 48 * Math.PI * 2; o.push(P(Math.cos(t) / 2, Math.sin(t) / 2)); } return o; }
+  if (label === 'square') return closedPoly([P(-.5, -.5), P(.5, -.5), P(.5, .5), P(-.5, .5)]);
+  if (label === 'triangle') return closedPoly([P(0, -.5), P(.5, .5), P(-.5, .5)]);
+  if (label === 'star') { const v = []; for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? .2 : .5; v.push(P(Math.cos(a) * r, Math.sin(a) * r + .047)); } return closedPoly(v); }
+  if (label === 'heart') {
+    const o = []; let y0 = 1e9, y1 = -1e9;
+    for (let i = 0; i <= 60; i++) { const t = i / 60 * Math.PI * 2, y = -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)); o.push({ x: 16 * Math.pow(Math.sin(t), 3), y }); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+    return o.map(q => P(q.x / 32, (q.y - (y0 + y1) / 2) / (y1 - y0)));
+  }
+  if (label === 'line') return [st.p0[0], st.p0[st.p0.length - 1]];
+  return st.p0;
+}
+function applyLabel(st, label, conf, verified) {
+  st.label = label; st.conf = conf; st.verified = !!verified; st.labelT = performance.now();
+  st.snapped = LABELS.includes(label) && label !== 'squiggle' && (verified || conf >= 0.55);
+  const p = st.snapped ? tpl(label, st) : st.p0;
+  if (p !== st.p) {
+    st.p = p; st.t0 = performance.now();
+    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    for (const q of p) { x0 = Math.min(x0, q.x); y0 = Math.min(y0, q.y); x1 = Math.max(x1, q.x); y1 = Math.max(y1, q.y); }
+    st.w = Math.max(x1 - x0, 8); st.h = Math.max(y1 - y0, 8);
+  }
+  const rec = { id: st.id, label, points: st.raw, verified: !!verified }, i = S.log.findIndex(r => r.id === st.id);
+  if (i >= 0) S.log[i] = rec; else S.log.push(rec);
+  refreshUI();
+}
+async function classifyStroke(st) {
+  try {
+    const r = await fetch('api/classify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ points: st.raw }) });
+    if (!r.ok) throw new Error(r.status);
+    const j = await r.json();
+    if (!S.magic || !S.stickers.includes(st)) return;
+    applyLabel(st, j.label, j.confidence, false);
+    flash(S.hinted ? (j.label === 'squiggle' ? 'a nice squiggle!' : 'that’s a ' + j.label + '!') : 'tap the label if i got it wrong', 3200); S.hinted = true;
+  } catch (e) { S.magic = false; syncMagic(); flash('the shape model isn’t reachable here, so magic is off', 3800); }
+}
+function cycleLabel(st) { applyLabel(st, LABELS[(LABELS.indexOf(st.label) + 1) % LABELS.length], 1, true); }
+function chipAt(p) { for (let i = S.stickers.length - 1; i >= 0; i--) { const c = S.stickers[i].chip; if (c && Math.abs(p.x - c.x) < c.w / 2 && Math.abs(p.y - c.y) < c.h / 2 + 4) return S.stickers[i]; } return null; }
+function drawChips(now) {
+  ctx.font = '700 14px Nunito, "Trebuchet MS", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const s of S.stickers) {
+    s.chip = null; if (!s.label) continue;
+    const age = now - s.labelT; if (age > 4500) continue;
+    const a = Math.min(1, (4500 - age) / 700), txt = s.verified || s.conf >= .9 ? s.label : s.snapped ? s.label + ' ' + Math.round(s.conf * 100) + '%' : 'maybe ' + s.label;
+    const w = ctx.measureText(txt).width + 26, h = 30;
+    const x = Math.min(W - w / 2 - 8, Math.max(w / 2 + 8, s.x)), y = Math.max(110, s.y - s.h / 2 * s.s - 38);
+    s.chip = a > 0.3 ? { x, y, w, h } : null;
+    ctx.save(); ctx.globalAlpha = a; ctx.shadowColor = 'rgba(70,45,130,.25)'; ctx.shadowBlur = 12; ctx.shadowOffsetY = 4;
+    ctx.fillStyle = T.surface; ctx.beginPath(); ctx.roundRect(x - w / 2, y - h / 2, w, h, 15); ctx.fill();
+    ctx.shadowColor = 'transparent'; ctx.fillStyle = T.ink; ctx.fillText(txt, x, y + 1); ctx.restore();
+  }
+}
+function syncMagic() {
+  const b = $('#magicBtn'); b.textContent = 'magic shapes: ' + (S.magic ? 'on' : 'off'); b.setAttribute('aria-pressed', S.magic); $('#magicOpt').checked = S.magic;
+}
+function exportStrokes() {
+  const blob = new Blob([JSON.stringify({ version: 1, classes: LABELS, samples: S.log.map(({ label, points, verified }) => ({ label, points, verified })) })], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'strokes.json';
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
 /* ---------- mouse / touch ---------- */
 const pt = e => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
 cv.addEventListener('pointerdown', e => {
-  if (!S.mode) return; const p = pt(e), h = hit(p); cv.setPointerCapture(e.pointerId);
+  if (!S.mode) return; const p = pt(e), cs = chipAt(p), h = cs ? null : hit(p); cv.setPointerCapture(e.pointerId);
+  if (cs) { cycleLabel(cs); return; }
   if (h) {
     const now = performance.now();
     if (S.lastTap && S.lastTap.s === h && now - S.lastTap.t < 320) h.s = h.s < .85 ? 1 : h.s < 1.2 ? 1.5 : .7;
@@ -199,6 +284,7 @@ function render(now) {
     const bob = (RM || held) ? 0 : Math.sin(now / 650 + s.ph) * 3, wob = (RM || held) ? 0 : Math.sin(now / 1000 + s.ph) * .035;
     drawSticker(ctx, s, s.x, s.y + bob, s.r + wob, s.s * k * (held ? 1.06 : 1));
   }
+  drawChips(now);
   if (S.stroke.length) drawSticker(ctx, { p: S.stroke, col: COLORS[ci % COLORS.length], lw: 10 }, 0, 0, 0, 1);
   const h = S.mode === 'cam' ? S.hand : null;
   if (h) {
@@ -258,8 +344,11 @@ $('#mSave').onclick = () => {
 $('#camBtn').onclick = startCam;
 $('#touchBtn').onclick = () => { S.mode = 'touch'; enter(); };
 $('#stopBtn').onclick = leave;
-$('#undoBtn').onclick = () => { S.stickers.pop(); refreshUI(); };
+$('#undoBtn').onclick = () => { const u = S.stickers.pop(); if (u) S.log = S.log.filter(r => r.id !== u.id); refreshUI(); };
 $('#clearBtn').onclick = () => { S.stickers = []; S.grab = null; refreshUI(); flash('fresh start', 1500); };
 $('#shareBtn').onclick = openShare;
+$('#exportBtn').onclick = exportStrokes;
+$('#magicOpt').onchange = e => { S.magic = e.target.checked; };
+$('#magicBtn').onclick = () => { S.magic = !S.magic; syncMagic(); if (S.magic) flash('magic on. only a doodle’s outline numbers are sent, never video', 4500); };
 addEventListener('keydown', e => { if (e.key === 'Escape') closeShare(); });
 refreshUI();

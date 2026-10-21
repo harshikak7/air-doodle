@@ -21,7 +21,7 @@
 
   <header class="top">
     <div class="logo">air doodle<svg viewBox="0 0 46 8" fill="none" stroke="#8467D4" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M2 5C7 0 11 0 15 4S23 8 28 4 38 0 44 4"/></svg></div>
-    <button id="stopBtn" class="chip" hidden>stop camera</button>
+    <div class="tools"><button id="magicBtn" class="chip" hidden aria-pressed="false">magic shapes: off</button><button id="stopBtn" class="chip" hidden>stop camera</button></div>
   </header>
 
   <div id="hint" class="pill" role="status" aria-live="polite" hidden></div>
@@ -30,6 +30,7 @@
     <button id="undoBtn" class="btn">undo</button>
     <button id="shareBtn" class="btn main">share</button>
     <button id="clearBtn" class="btn ghost">clear</button>
+    <button id="exportBtn" class="btn ghost" hidden>export strokes</button>
   </nav>
 
   <section id="intro" class="card" aria-labelledby="t">
@@ -38,9 +39,14 @@
     <p>Pinch your thumb and index finger in front of the camera to draw. Let go and your doodle pops into a sticker. Pinch a sticker to carry it around.</p>
     <ul>
       <li><i><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#8467D4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6.5l2.5 2.5L10 3"/></svg></i>Hand tracking runs on this device only</li>
-      <li><i><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#8467D4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6.5l2.5 2.5L10 3"/></svg></i>Nothing is recorded, uploaded or saved</li>
+      <li><i><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#8467D4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6.5l2.5 2.5L10 3"/></svg></i>Video is never recorded, uploaded or saved</li>
       <li><i><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#8467D4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6.5l2.5 2.5L10 3"/></svg></i>Shared pictures hold only your doodles, never your face</li>
     </ul>
+    <label class="switch">
+      <input type="checkbox" id="magicOpt">
+      <span class="track" aria-hidden="true"></span>
+      <span class="swtext"><b>Magic shapes <em>optional</em></b><small>Tidies hearts, stars, circles and more. Sends only the outline numbers of a doodle to a small model on this site, never video.</small></span>
+    </label>
     <p id="err" hidden></p>
     <div class="row">
       <button id="camBtn" class="btn main">turn on camera</button>
