@@ -12,7 +12,7 @@ ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "api"))
 import _ml  # noqa: E402
-from api.classify import handler, handle_classify  # noqa: E402
+from api.main import handler, handle_classify  # noqa: E402
 
 
 def circle(n=60, r=100, cx=300, cy=300):

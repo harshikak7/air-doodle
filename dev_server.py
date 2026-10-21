@@ -9,7 +9,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ROOT)
-from api.classify import MAX_BODY, handle_classify  # noqa: E402
+from api.main import MAX_BODY, handle_classify  # noqa: E402
 
 with open(os.path.join(ROOT, "vercel.json")) as f:
     HEADERS = next(h["headers"] for h in json.load(f)["headers"] if h["source"] == "/(.*)")

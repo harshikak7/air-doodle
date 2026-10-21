@@ -1,7 +1,7 @@
 {
   "cleanUrls": true,
   "functions": {
-    "api/classify.py": { "includeFiles": "api/_model.json" }
+    "api/main.py": { "includeFiles": "api/_model.json" }
   },
   "headers": [
     {
