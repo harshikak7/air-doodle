@@ -90,6 +90,9 @@ def main():
     out = os.path.join(HERE, "..", "api", "_model.json")
     with open(out, "w") as f:
         json.dump(model, f, separators=(",", ":"))
+    os.makedirs(os.path.join(HERE, "..", "model"), exist_ok=True)   # copy the browser uses for on-device mode
+    with open(os.path.join(HERE, "..", "model", "model.json"), "w") as f:
+        json.dump(model, f, separators=(",", ":"))
     served = _ml.Model(model)
     worst = max(np.abs(np.array(served.predict_proba(list(Xte[i]))) - mlp.predict_proba(z(Xte[i:i + 1]))[0]).max() for i in range(0, len(Xte), 50))
     assert worst < 1e-3, f"serving mismatch {worst}"

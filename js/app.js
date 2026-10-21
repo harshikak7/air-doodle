@@ -26,7 +26,7 @@ let W = 0, H = 0, ci = 0;
 const S = {
   mode: null, stream: null, hands: null, ready: false, busy: false,
   hand: null, seen: 0, lastInf: 0, lastT: -1, onN: 0, offN: 0, pinchRaw: false, pinching: false, drawing: false,
-  stroke: [], stickers: [], grab: null, drag: null, touchDraw: false, lastTap: null, flashUntil: 0, magic: false, log: [], nid: 0, hinted: false
+  stroke: [], stickers: [], grab: null, drag: null, touchDraw: false, lastTap: null, flashUntil: 0, magic: false, log: [], nid: 0, hinted: false, useLocal: false, model: null
 };
 
 function resize() {
@@ -192,14 +192,24 @@ function applyLabel(st, label, conf, verified) {
   refreshUI();
 }
 async function classifyStroke(st) {
-  try {
-    const r = await fetch('api/classify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ points: st.raw }) });
-    if (!r.ok) throw new Error(r.status);
-    const j = await r.json();
-    if (!S.magic || !S.stickers.includes(st)) return;
-    applyLabel(st, j.label, j.confidence, false);
-    flash(S.hinted ? (j.label === 'squiggle' ? 'a nice squiggle!' : 'that’s a ' + j.label + '!') : 'tap the label if i got it wrong', 3200); S.hinted = true;
-  } catch (e) { S.magic = false; syncMagic(); flash('the shape model isn’t reachable here, so magic is off', 3800); }
+  let j = null;
+  if (!S.useLocal) {   // 1) Python API on this site
+    try {
+      const r = await fetch('api/classify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ points: st.raw }) });
+      if (!r.ok) throw new Error(r.status);
+      j = await r.json();
+    } catch (e) { S.useLocal = true; }
+  }
+  if (!j) {            // 2) same model, run on this device (static hosts, or the API isn't deployed)
+    try {
+      if (!S.model) S.model = await (await fetch('model/model.json')).json();
+      j = ShapeModel.classify(S.model, st.raw);
+    } catch (e) { S.magic = false; syncMagic(); flash('the shape model couldn’t load here, so magic is off', 3800); return; }
+  }
+  if (!S.magic || !S.stickers.includes(st)) return;
+  applyLabel(st, j.label, j.confidence, false);
+  flash(S.hinted ? (j.label === 'squiggle' ? 'a nice squiggle!' : 'that’s a ' + j.label + '!') : (S.useLocal ? 'tidied on your device. tap the label if i got it wrong' : 'tap the label if i got it wrong'), 3400);
+  S.hinted = true;
 }
 function cycleLabel(st) { applyLabel(st, LABELS[(LABELS.indexOf(st.label) + 1) % LABELS.length], 1, true); }
 function chipAt(p) { for (let i = S.stickers.length - 1; i >= 0; i--) { const c = S.stickers[i].chip; if (c && Math.abs(p.x - c.x) < c.w / 2 && Math.abs(p.y - c.y) < c.h / 2 + 4) return S.stickers[i]; } return null; }

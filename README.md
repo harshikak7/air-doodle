@@ -8,6 +8,7 @@ Draw in thin air by pinching your thumb and index finger at your webcam. Let go 
 |---|---|
 | `js/app.js` + `vendor/mediapipe/` | Real hand tracking (MediaPipe Hands, 21 landmarks) running in the browser, pinch detection with hysteresis, One Euro smoothing |
 | `api/classify.py` + `api/_ml.py` | Python serverless function: stroke features and a small MLP, standard library only |
+| `js/shapes-model.js` + `model/model.json` | Same model in JavaScript, used automatically when the API isn't available |
 | `ml/` | Data generator, training script, evaluation report, confusion matrix |
 | `tests/` | Unit tests for features, validation and the HTTP handler |
 | `vercel.json` | Deploy config plus a strict Content-Security-Policy |
@@ -16,21 +17,32 @@ Draw in thin air by pinching your thumb and index finger at your webcam. Let go 
 
 - Camera access is requested only after you press "turn on camera". Saying no still lets you play with touch.
 - Hand tracking happens in your browser. Video is never recorded, uploaded or stored.
-- Magic shapes is **off by default**. When on, the browser sends only the outline coordinates of a finished doodle (a few dozen number pairs, relative to the doodle's own corner) to `/api/classify` on the same site. The function does not log or store request bodies. As with any host, Vercel keeps normal request metadata.
+- Magic shapes is **off by default**. When on, the browser sends only the outline coordinates of a finished doodle (a few dozen number pairs, relative to the doodle's own corner) to `/api/classify` on the same site. The function does not log or store request bodies. As with any host, Vercel keeps normal request metadata. If the API isn't available, the same model runs in your browser and nothing is sent.
 - No third-party requests: the model, wasm, scripts and fonts are all in the repo. `vercel.json` enforces it with `connect-src 'self'` and no external script sources.
 - The share card contains only the stickers, never the camera image.
 
 ## Run locally
 
-    python3 dev_server.py        # http://localhost:8000 (static files + /api/classify, same security headers as Vercel)
-    python3 -m unittest discover -s tests -v
+You need Python 3.9+ (check with `python3 --version`, or `py --version` on Windows). No pip installs needed to run the app.
 
-Needs only Python 3.9+. The camera works on `localhost` and on HTTPS.
+1. Unzip, open a terminal **inside the `air-doodle` folder**.
+2. Start the server:
+
+       python3 dev_server.py          # Mac / Linux
+       py dev_server.py               # Windows (or: python dev_server.py)
+
+3. Open **http://localhost:8000** in Chrome, Edge or Safari. Press "turn on camera" and allow it.
+4. Optional: `python3 -m unittest discover -s tests -v` runs the tests.
+
+Do not double-click `index.html`. Browsers block the camera and the model files on `file://`, so it must be served (step 2). Use a different port with `PORT=9000 python3 dev_server.py` (Windows PowerShell: `$env:PORT=9000; py dev_server.py`).
 
 ## Deploy
 
-**Vercel (recommended, runs the Python API):**
-1. Push this folder to a GitHub repo:
+**Vercel**
+
+Vercel runs Python through serverless functions: any `api/*.py` file that defines a `handler` class becomes an endpoint, which is exactly what `api/classify.py` does. No build step, no `requirements.txt` needed.
+
+1. Push this folder to GitHub:
 
        git init
        git add .
@@ -39,12 +51,20 @@ Needs only Python 3.9+. The camera works on `localhost` and on HTTPS.
        git remote add origin https://github.com/YOUR-USERNAME/air-doodle.git
        git push -u origin main
 
-2. On vercel.com: **Add New → Project → import the repo**. Framework preset **Other**, leave build command and output directory empty, then **Deploy**. Vercel picks up `api/classify.py` as a Python function automatically.
-3. Check it: open `https://YOUR-APP.vercel.app/api/classify`. You should see `{"status": "ok", ...}`. Then open the site, switch on magic shapes and draw a heart.
+2. Go to vercel.com, sign in with GitHub, **Add New → Project**, pick the repo.
+3. Framework preset **Other**. Leave Build Command, Output Directory and Install Command empty. Click **Deploy**.
+4. When it finishes, open `https://YOUR-APP.vercel.app/api/classify`. Seeing `{"status": "ok", ...}` means the Python function is live. Then open the site, switch on magic shapes and draw a heart.
 
-Or from the terminal: `npm i -g vercel && vercel --prod`.
+CLI instead: `npm i -g vercel`, then `vercel` in the folder (and `vercel --prod` to publish).
 
-**GitHub Pages** also works for the camera and drawing, but it only hosts static files, so magic shapes cannot run there (the app notices and switches it off).
+**If the Python function does not work on your Vercel account, the app still works.** If `/api/classify` is missing or fails, magic shapes automatically runs the same model inside the browser (`js/shapes-model.js` + `model/model.json`), so nothing breaks and nothing is sent anywhere. A test (`tests/test_parity.py`) checks that the browser and Python versions give identical results. You can then ignore the `api/` folder, or fix the function later from the Vercel logs (Project → Deployments → Functions).
+
+Common fixes if the function errors:
+- 404 on `/api/classify`: confirm the repo root contains `api/classify.py` (not inside another folder) and redeploy.
+- 500 mentioning `_model.json`: confirm `api/_model.json` is committed. `vercel.json` already lists it under `includeFiles`.
+- Anything else: open Project → Logs and read the Python traceback.
+
+**Netlify / GitHub Pages / any static host:** works too. They have no Python, so magic shapes runs on-device. Drag the folder onto Netlify Drop, or on GitHub use Settings → Pages → Deploy from branch → main / root.
 
 ## The model
 
@@ -52,7 +72,7 @@ Strokes are resampled to 64 points and described by 87 features that do not depe
 
 Latest numbers are in [`ml/report.md`](ml/report.md) and `ml/confusion_matrix.png`. Training data is **synthetic**: a generator draws each shape with hand wobble, random start point and direction, overshoot or gaps, uneven sampling, rotation and hooks at the end. A logistic-regression baseline is trained alongside for comparison.
 
-Retrain: `pip install -r ml/requirements.txt && python ml/train.py`. This rewrites `api/_model.json`; commit it and redeploy.
+Retrain: `pip install -r ml/requirements.txt && python ml/train.py`. This rewrites `api/_model.json` and `model/model.json`; commit both and redeploy.
 
 ### Improve it with real strokes
 
