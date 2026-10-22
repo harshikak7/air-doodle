@@ -4,7 +4,8 @@
     python ml/train.py                       # synthetic data only
     python ml/train.py --extra strokes.json  # add real strokes exported from the app (verified ones)
 
-Outputs: api/_model.json (weights, used by the API), ml/report.md, ml/confusion_matrix.png
+Outputs: backend/model.json (used by the Python API), frontend/model/model.json (on-device copy),
+ml/report.md, ml/confusion_matrix.png
 """
 import argparse
 import json
@@ -18,8 +19,8 @@ from sklearn.neural_network import MLPClassifier
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-sys.path.insert(0, os.path.join(HERE, "..", "api"))
-import _ml  # noqa: E402
+sys.path.insert(0, os.path.join(HERE, "..", "backend"))
+import ml_core as _ml  # noqa: E402
 import shapes  # noqa: E402
 
 CLASSES = shapes.CLASSES
@@ -87,11 +88,11 @@ def main():
         "meta": {"n_train": int(len(ytr)), "test_acc": round(res["MLP 64-32 (shipped)"][0], 4),
                  "stress_acc": round(res["MLP 64-32 (shipped)"][1], 4), "features": _ml.N_FEATURES},
     }
-    out = os.path.join(HERE, "..", "api", "_model.json")
+    out = os.path.join(HERE, "..", "backend", "model.json")
     with open(out, "w") as f:
         json.dump(model, f, separators=(",", ":"))
-    os.makedirs(os.path.join(HERE, "..", "model"), exist_ok=True)   # copy the browser uses for on-device mode
-    with open(os.path.join(HERE, "..", "model", "model.json"), "w") as f:
+    os.makedirs(os.path.join(HERE, "..", "frontend", "model"), exist_ok=True)   # copy the browser uses for on-device mode
+    with open(os.path.join(HERE, "..", "frontend", "model", "model.json"), "w") as f:
         json.dump(model, f, separators=(",", ":"))
     served = _ml.Model(model)
     worst = max(np.abs(np.array(served.predict_proba(list(Xte[i]))) - mlp.predict_proba(z(Xte[i:i + 1]))[0]).max() for i in range(0, len(Xte), 50))

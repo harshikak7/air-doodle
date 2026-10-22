@@ -26,7 +26,7 @@ let W = 0, H = 0, ci = 0;
 const S = {
   mode: null, stream: null, hands: null, ready: false, busy: false,
   hand: null, seen: 0, lastInf: 0, lastT: -1, onN: 0, offN: 0, pinchRaw: false, pinching: false, drawing: false,
-  stroke: [], stickers: [], grab: null, drag: null, touchDraw: false, lastTap: null, flashUntil: 0, magic: false, log: [], nid: 0, hinted: false, useLocal: false, model: null
+  stroke: [], stickers: [], grab: null, drag: null, touchDraw: false, lastTap: null, flashUntil: 0, magic: false, log: [], nid: 0, hinted: false, noServer: false, model: null, warmed: false
 };
 
 function resize() {
@@ -97,7 +97,7 @@ function enter() {
   const cam = S.mode === 'cam';
   $('#intro').hidden = true; $('#dock').hidden = false; $('#stopBtn').hidden = false;
   stage.classList.toggle('cam', cam); $('#stopBtn').textContent = cam ? 'stop camera' : 'back';
-  resize(); refreshUI(); $('#magicBtn').hidden = false; syncMagic();
+  resize(); refreshUI(); $('#magicBtn').hidden = false; syncMagic(); if (S.magic) warmServer();
   if (!cam) say('drag anywhere to draw. let go and it pops into a sticker');
 }
 
@@ -191,24 +191,30 @@ function applyLabel(st, label, conf, verified) {
   if (i >= 0) S.log[i] = rec; else S.log.push(rec);
   refreshUI();
 }
+const API = (window.AIR_DOODLE_API || '').replace(/\/$/, '');
+async function viaServer(st) {   // Python API, with a short timeout so a sleeping free host never blocks the doodle
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 4000);
+  try {
+    const r = await fetch(API + '/api/classify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ points: st.raw }), signal: ctl.signal });
+    if (r.status === 404 || r.status === 405 || r.status === 501) { S.noServer = true; return null; }   // no API on this site
+    return r.ok ? await r.json() : null;
+  } catch (e) { return null; } finally { clearTimeout(timer); }
+}
+function warmServer() {   // wakes a sleeping free host; sends nothing about you
+  if (!API || S.warmed) return; S.warmed = true;
+  fetch(API + '/health', { cache: 'no-store' }).catch(() => {});
+}
 async function classifyStroke(st) {
-  let j = null;
-  if (!S.useLocal) {   // 1) Python API on this site
-    try {
-      const r = await fetch('api/classify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ points: st.raw }) });
-      if (!r.ok) throw new Error(r.status);
-      j = await r.json();
-    } catch (e) { S.useLocal = true; }
-  }
-  if (!j) {            // 2) same model, run on this device (static hosts, or the API isn't deployed)
+  let j = S.noServer ? null : await viaServer(st), local = false;
+  if (!j) {            // same model, run on this device
     try {
       if (!S.model) S.model = await (await fetch('model/model.json')).json();
-      j = ShapeModel.classify(S.model, st.raw);
+      j = ShapeModel.classify(S.model, st.raw); local = true;
     } catch (e) { S.magic = false; syncMagic(); flash('the shape model couldn’t load here, so magic is off', 3800); return; }
   }
   if (!S.magic || !S.stickers.includes(st)) return;
   applyLabel(st, j.label, j.confidence, false);
-  flash(S.hinted ? (j.label === 'squiggle' ? 'a nice squiggle!' : 'that’s a ' + j.label + '!') : (S.useLocal ? 'tidied on your device. tap the label if i got it wrong' : 'tap the label if i got it wrong'), 3400);
+  flash(S.hinted ? (j.label === 'squiggle' ? 'a nice squiggle!' : 'that’s a ' + j.label + '!') : (local ? 'tidied on your device. tap the label if i got it wrong' : 'tap the label if i got it wrong'), 3400);
   S.hinted = true;
 }
 function cycleLabel(st) { applyLabel(st, LABELS[(LABELS.indexOf(st.label) + 1) % LABELS.length], 1, true); }
@@ -358,7 +364,7 @@ $('#undoBtn').onclick = () => { const u = S.stickers.pop(); if (u) S.log = S.log
 $('#clearBtn').onclick = () => { S.stickers = []; S.grab = null; refreshUI(); flash('fresh start', 1500); };
 $('#shareBtn').onclick = openShare;
 $('#exportBtn').onclick = exportStrokes;
-$('#magicOpt').onchange = e => { S.magic = e.target.checked; };
-$('#magicBtn').onclick = () => { S.magic = !S.magic; syncMagic(); if (S.magic) flash('magic on. only a doodle’s outline numbers are sent, never video', 4500); };
+$('#magicOpt').onchange = e => { S.magic = e.target.checked; if (S.magic) warmServer(); };
+$('#magicBtn').onclick = () => { S.magic = !S.magic; syncMagic(); if (S.magic) warmServer(); if (S.magic) flash('magic on. only a doodle’s outline numbers are sent, never video', 4500); };
 addEventListener('keydown', e => { if (e.key === 'Escape') closeShare(); });
 refreshUI();

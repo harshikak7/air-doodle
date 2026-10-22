@@ -1,0 +1,2 @@
+# The API uses only the Python standard library, so nothing to install.
+# (Training dependencies live in ../ml/requirements.txt.)

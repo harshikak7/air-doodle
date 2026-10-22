@@ -1,0 +1,15 @@
+# One-click backend on Render: New + > Blueprint > pick this repo.
+services:
+  - type: web
+    name: air-doodle-api
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python server.py
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.3
+      - key: ALLOWED_ORIGINS
+        sync: false   # you will be asked: paste your Vercel site URL, e.g. https://air-doodlee.vercel.app

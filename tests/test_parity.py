@@ -2,8 +2,8 @@
 import json, math, os, random, shutil, subprocess, sys, tempfile, unittest
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
-sys.path.insert(0, os.path.join(ROOT, "api"))
-import _ml  # noqa: E402
+sys.path.insert(0, os.path.join(ROOT, "backend"))
+import ml_core as _ml  # noqa: E402
 
 
 def strokes(seed=1, count=30):

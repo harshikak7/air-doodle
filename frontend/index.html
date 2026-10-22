@@ -45,7 +45,7 @@
     <label class="switch">
       <input type="checkbox" id="magicOpt">
       <span class="track" aria-hidden="true"></span>
-      <span class="swtext"><b>Magic shapes <em>optional</em></b><small>Tidies hearts, stars, circles and more. Only a doodle’s outline numbers are used, never video, and they stay on this site or your device.</small></span>
+      <span class="swtext"><b>Magic shapes <em>optional</em></b><small>Tidies hearts, stars, circles and more. Only a doodle’s outline numbers are used, never video. They go to the shape server, or stay on your device if it isn’t reachable.</small></span>
     </label>
     <p id="err" hidden></p>
     <div class="row">
@@ -69,6 +69,7 @@
 </main>
 
 <script src="vendor/mediapipe/hands/hands.js"></script>
+<script src="config.js"></script>
 <script src="js/shapes-model.js"></script>
 <script src="js/app.js"></script>
 </body>

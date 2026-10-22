@@ -5,14 +5,16 @@ import os
 import sys
 import threading
 import unittest
+import urllib.error
 import urllib.request
 from http.server import HTTPServer
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 sys.path.insert(0, ROOT)
-sys.path.insert(0, os.path.join(ROOT, "api"))
-import _ml  # noqa: E402
-from api.main import handler, handle_classify  # noqa: E402
+sys.path.insert(0, os.path.join(ROOT, "backend"))
+import ml_core as _ml  # noqa: E402
+import server  # noqa: E402
+from server import Handler, handle_classify  # noqa: E402
 
 
 def circle(n=60, r=100, cx=300, cy=300):
@@ -59,19 +61,53 @@ class Classify(unittest.TestCase):
 
 
 class Http(unittest.TestCase):
-    def test_roundtrip(self):
-        srv = HTTPServer(("127.0.0.1", 0), handler)
-        threading.Thread(target=srv.serve_forever, daemon=True).start()
-        url = f"http://127.0.0.1:{srv.server_port}/"
-        req = urllib.request.Request(url, json.dumps({"points": circle()}).encode(), {"Content-Type": "application/json"})
-        with urllib.request.urlopen(req) as r:
-            body = json.load(r)
-        self.assertEqual(body["label"], "circle")
-        self.assertGreater(body["confidence"], 0.5)
-        with urllib.request.urlopen(url) as r:
-            self.assertEqual(json.load(r)["status"], "ok")
-        srv.shutdown()
-        srv.server_close()
+    def setUp(self):
+        self.old = (list(server.ALLOWED), server.RATE)
+        server.ALLOWED[:] = ["https://my-site.vercel.app"]
+        server._hits.clear()
+        self.srv = HTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+        self.url = f"http://127.0.0.1:{self.srv.server_port}"
+
+    def tearDown(self):
+        self.srv.shutdown()
+        self.srv.server_close()
+        server.ALLOWED[:] = self.old[0]
+        server.RATE = self.old[1]
+
+    def call(self, path="/api/classify", body=None, method=None, origin="https://my-site.vercel.app"):
+        data = json.dumps(body).encode() if body is not None else None
+        req = urllib.request.Request(self.url + path, data, {"Content-Type": "application/json", **({"Origin": origin} if origin else {})}, method=method)
+        try:
+            with urllib.request.urlopen(req) as r:
+                return r.status, dict(r.headers), r.read()
+        except urllib.error.HTTPError as e:
+            return e.code, dict(e.headers), e.read()
+
+    def test_roundtrip_and_cors(self):
+        status, headers, body = self.call(body={"points": circle()})
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["label"], "circle")
+        self.assertEqual(headers["Access-Control-Allow-Origin"], "https://my-site.vercel.app")
+
+    def test_health(self):
+        status, _, body = self.call("/health", origin=None)
+        self.assertEqual((status, json.loads(body)["status"]), (200, "ok"))
+
+    def test_preflight_and_blocked_origin(self):
+        status, headers, _ = self.call(method="OPTIONS")
+        self.assertEqual(status, 204)
+        self.assertIn("POST", headers["Access-Control-Allow-Methods"])
+        self.assertEqual(self.call(method="OPTIONS", origin="https://evil.example")[0], 403)
+        self.assertEqual(self.call(body={"points": circle()}, origin="https://evil.example")[0], 403)
+
+    def test_rate_limit(self):
+        server.RATE = 3
+        codes = [self.call(body={"points": circle()})[0] for _ in range(5)]
+        self.assertEqual(codes, [200, 200, 200, 429, 429])
+
+    def test_unknown_path(self):
+        self.assertEqual(self.call("/nope", origin=None)[0], 404)
 
 
 if __name__ == "__main__":

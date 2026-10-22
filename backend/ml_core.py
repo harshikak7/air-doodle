@@ -1,7 +1,7 @@
 """Stroke features + tiny MLP inference, pure standard library.
 
 This one file is used by BOTH training (ml/train.py) and the serverless API
-(api/classify.py), so features can never drift between training and serving.
+(backend/server.py), so features can never drift between training and serving.
 Standard library only keeps Vercel cold starts fast (no numpy needed to serve).
 """
 import json
@@ -12,7 +12,7 @@ from functools import lru_cache
 N_RESAMPLE = 64   # points after arc-length resampling
 GRID = 8          # occupancy grid is GRID x GRID
 BINS = 12         # tangent-direction histogram bins (angle mod pi)
-MODEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_model.json")
+MODEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "model.json")
 
 
 # ---------------------------------------------------------------- input checks
